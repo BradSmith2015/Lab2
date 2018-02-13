@@ -50,8 +50,6 @@ object Lab2 extends jsy.util.JsyApplication with Lab2Like {
    * - Double.NaN
    * - s.toDouble (for s: String)
    * - n.isNaN (for n: Double)
-   * - n.isWhole (for n: Double)
-   * - s (for n: Double)
    * - s format n (for s: String [a format string like for printf], n: Double)
    *
    * You can catch an exception in Scala using:
@@ -62,7 +60,12 @@ object Lab2 extends jsy.util.JsyApplication with Lab2Like {
     require(isValue(v))
     (v: @unchecked) match {
       case N(n) => n
-      case _ => ???
+      case B(b) => if(b) 1.0 else 0.0
+      case S(s) => try s.toDouble catch{
+       case _: NumberFormatException => Double.NaN
+      }
+      case Undefined => Double.NaN
+      case _ => throw new UnsupportedOperationException
     }
   }
 
@@ -70,7 +73,10 @@ object Lab2 extends jsy.util.JsyApplication with Lab2Like {
     require(isValue(v))
     (v: @unchecked) match {
       case B(b) => b
-      case _ => ???
+      case N(n) => if(n == 0 || n.isNaN()) false else true
+      case S(s) => if(s == "") false else true
+      case Undefined => false
+      case _ => throw new UnsupportedOperationException
     }
   }
 
@@ -79,19 +85,70 @@ object Lab2 extends jsy.util.JsyApplication with Lab2Like {
     (v: @unchecked) match {
       case S(s) => s
       case Undefined => "undefined"
-      case _ => ???
+      case B(b) => if(b) "true" else "false"
+      case N(n) => if (n.isWhole()) n.toInt.toString() else n.toString()
+      case _ => throw new UnsupportedOperationException
     }
   }
 
   def eval(env: Env, e: Expr): Expr = {
+    def EtoV(e: Expr): Expr = eval(env,e)
     e match {
       /* Base Cases */
+      case Var(x) => lookup(env,x)
+
+      case ConstDecl(x, e1, e2) => eval(extend(env,x,EtoV(e1)),e2)
+      case Unary(uop,e1) => uop match{
+        case Neg => N(-toNumber(EtoV(e1)))
+        case Not => B(!toBoolean(EtoV(e1)))
+      }
+      case Binary(bop, e1, e2) => bop match {
+        case Plus => (EtoV(e1), EtoV(e2)) match {
+          case (S(_), _) => S(toStr(EtoV(e1)) + toStr(EtoV(e2)))
+          case (_, S(_)) => S(toStr(EtoV(e1)) + toStr(EtoV(e2)))
+          case (_, _) => N(toNumber(EtoV(e1)) + toNumber(EtoV(e2)))
+
+        }
+        case Minus => N(toNumber(EtoV(e1)) - toNumber(EtoV(e2)))
+        case Times => N(toNumber(EtoV(e1)) * toNumber(EtoV(e2)))
+        case Div => N(toNumber(EtoV(e1)) / toNumber(EtoV(e2)))
+        case Eq => B(EtoV(e1) == EtoV(e2))
+        case Ne => B(EtoV(e1) != EtoV(e2))
+        case Lt => (EtoV(e1), EtoV(e2)) match {
+          case (S(_), S(_)) => B(toStr(EtoV(e1)) < toStr(EtoV(e2)))
+          case (_, _) => B(toNumber(EtoV(e1)) < toNumber(EtoV(e2)))
+
+        }
+        case Le => (EtoV(e1), EtoV(e2)) match {
+          case (S(_), S(_)) => B(toStr(EtoV(e1)) <= toStr(EtoV(e2)))
+          case (_, _) => B(toNumber(EtoV(e1)) <= toNumber(EtoV(e2)))
+
+        }
+
+        case Gt => (EtoV(e1), EtoV(e2)) match {
+          case (S(_), S(_)) => B(toStr(EtoV(e1)) > toStr(EtoV(e2)))
+          case (_, _) => B(toNumber(EtoV(e1)) > toNumber(EtoV(e2)))
+
+        }
+        case Ge => (EtoV(e1), EtoV(e2)) match {
+          case (S(_), S(_)) => B(toStr(EtoV(e1)) >= toStr(EtoV(e2)))
+          case (_, _) => B(toNumber(EtoV(e1)) >= toNumber(EtoV(e2)))
+
+
+        }
+        case And => if(toBoolean(EtoV(e1))) EtoV(e2) else EtoV(e1)
+        case Or => if(toBoolean(EtoV(e1))) EtoV(e1) else EtoV(e2)
+        case Seq => EtoV(e1);EtoV(e2)
+
+
+      }
+      case If(e1,e2,e3) => if(toBoolean(EtoV(e1))) EtoV(e2) else EtoV(e3)
 
       /* Inductive Cases */
       case Print(e1) => println(pretty(eval(env, e1))); Undefined
+      case _ => e
 
-      case _ => ???
-    }
+   }
   }
 
 
